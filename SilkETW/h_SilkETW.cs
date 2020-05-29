@@ -10,6 +10,7 @@ using YaraSharp;
 using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json.Linq;
+using System.IO.Pipes;
 
 namespace SilkETW
 {
@@ -26,7 +27,8 @@ namespace SilkETW
         None = 0,
         url,
         file,
-        eventlog
+        eventlog,
+        pipe
     }
 
     enum FilterOption
@@ -501,7 +503,29 @@ namespace SilkETW
                 //--
 
                 // Process JSON
-                if (OutputType == OutputType.file)
+                if (OutputType == OutputType.pipe)
+                {
+                    try
+                    {
+                        NamedPipeClientStream pipeClient = new NamedPipeClientStream(Path);
+                        if (!pipeClient.IsConnected)
+                        {
+                            pipeClient.Connect();
+                        }
+                        using (StreamWriter sw = new StreamWriter(pipeClient))
+                        {
+                            sw.WriteLine(JSONData);
+                            sw.Flush();
+                        }
+                        pipeClient.Close();
+                        return 0;
+                    }
+                    catch(Exception ex)
+                    {
+                        return 1;
+                    }
+                }
+                else if (OutputType == OutputType.file)
                 {
                     try
                     {

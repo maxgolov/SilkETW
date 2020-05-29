@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.IO.Pipes;
 using McMaster.Extensions.CommandLineUtils;
 using YaraSharp;
 
@@ -25,7 +26,7 @@ namespace SilkETW
         public KernelKeywords KernelKeywords { get; }
 
         [Option("-ot|--outputtype", CommandOptionType.SingleValue)]
-        public OutputType OutputType { get; }
+        public OutputType OutputType { get; set; }
 
         [Option("-p|--path", CommandOptionType.SingleValue)]
         public String Path { get; set; } = String.Empty;
@@ -157,6 +158,11 @@ namespace SilkETW
                             }
                         }
                         catch { }
+                        if (Path.StartsWith("\\\\.\\pipe"))
+                        {
+                            OutputType = OutputType.pipe;
+                        }
+                        else
                         if (!(Directory.Exists(System.IO.Path.GetDirectoryName(Path))))
                         {
                             SilkUtility.ReturnStatusMessage("[!] Invalid path specified (-p|--path)", ConsoleColor.Red);
