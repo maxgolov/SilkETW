@@ -7,6 +7,7 @@ using Microsoft.Diagnostics.Tracing.Parsers;
 using System.Xml;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 
 namespace SilkETW
 {
@@ -59,9 +60,33 @@ namespace SilkETW
                     // A DynamicTraceEventParser can understand how to read the embedded manifests that occur in the dataStream
                     var EventParser = new DynamicTraceEventParser(EventSource);
 
-                    // Loop events as they arrive
-                    EventParser.All += delegate (TraceEvent data)
+                    Action<TraceEvent> action = delegate (TraceEvent data)
                     {
+                        bool isEventWriteString = false;
+                        bool isEventWriteStringXML = false;
+                        string payload = "";
+
+                        //
+                        // Handler for unmanifested events generated with EventWriteString
+                        //
+                        if (data.EventName == "EventWriteString")
+                        {
+                            isEventWriteString = true;
+                            try
+                            {
+                                UTF8Encoding utf8 = new UTF8Encoding();
+                                byte[] buff = data.EventData();
+                                int pos = 0;
+                                int count = data.EventDataLength;
+                                payload = utf8.GetString(buff, pos, count);
+                                isEventWriteStringXML = payload.StartsWith("<Event", StringComparison.CurrentCulture);
+                            }
+                            catch (Exception ex)
+                            {
+                                // I am very cross with you... please send me good payloads next time!
+                            }
+                        }
+
                         // It's a bit ugly but ... ¯\_(ツ)_/¯
                         if (FilterOption != FilterOption.None)
                         {
@@ -124,32 +149,44 @@ namespace SilkETW
                             var EventProperties = new Hashtable();
 
                             // Try to parse event XML
-                            try
+                            Action<string> parseXML = (inString) =>
                             {
-                                StringReader XmlStringContent = new StringReader(data.ToString());
-                                XmlTextReader EventElementReader = new XmlTextReader(XmlStringContent);
-                                while (EventElementReader.Read())
+                                try
                                 {
-                                    for (int AttribIndex = 0; AttribIndex < EventElementReader.AttributeCount; AttribIndex++)
+                                    StringReader XmlStringContent = new StringReader(inString);
+                                    XmlTextReader EventElementReader = new XmlTextReader(XmlStringContent);
+                                    while (EventElementReader.Read())
                                     {
-                                        EventElementReader.MoveToAttribute(AttribIndex);
+                                        for (int AttribIndex = 0; AttribIndex < EventElementReader.AttributeCount; AttribIndex++)
+                                        {
+                                            EventElementReader.MoveToAttribute(AttribIndex);
 
-                                        // Cap maxlen for eventdata elements to 10k
-                                        if (EventElementReader.Value.Length > 10000)
-                                        {
-                                            String DataValue = EventElementReader.Value.Substring(0, Math.Min(EventElementReader.Value.Length, 10000));
-                                            EventProperties.Add(EventElementReader.Name, DataValue);
-                                        } else
-                                        {
-                                            EventProperties.Add(EventElementReader.Name, EventElementReader.Value);
+                                            // Cap maxlen for eventdata elements to 10k
+                                            if (EventElementReader.Value.Length > 10000)
+                                            {
+                                                String DataValue = EventElementReader.Value.Substring(0, Math.Min(EventElementReader.Value.Length, 10000));
+                                                EventProperties.Add(EventElementReader.Name, DataValue);
+                                            } else
+                                            {
+                                                EventProperties.Add(EventElementReader.Name, EventElementReader.Value);
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            catch
+                                catch
+                                {
+                                    // For debugging (?), never seen this fail
+                                    EventProperties.Add("XmlEventParsing", "false");
+                                }
+                            };
+
+                            parseXML(data.ToString());
+                            if (isEventWriteStringXML)
                             {
-                                // For debugging (?), never seen this fail
-                                EventProperties.Add("XmlEventParsing", "false");
+                                parseXML(payload);
+                            } else
+                            {
+                                // TODO: implement support for alternate payload types
                             }
                             eRecord.XmlEventData = EventProperties;
 
@@ -181,6 +218,13 @@ namespace SilkETW
                             }
                         }
                     };
+
+                    // Loop events as they arrive without the parser.
+                    // TODO: check for duplicates?
+                    EventSource.AllEvents += action;
+
+                    // Loop events as they arrive thru the parser
+                    EventParser.All += action;
 
                     // Specify the providers details
                     if (CollectorType == CollectorType.Kernel)
