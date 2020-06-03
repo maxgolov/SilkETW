@@ -35,7 +35,10 @@ namespace SilkETW
             {
                 // We add a GUID in case of concurrent SilkETW execution
                 String RandId = Guid.NewGuid().ToString();
-                SilkUtility.EventParseSessionName = ("SilkETWUserCollector_" + RandId);
+                // SilkUtility.EventParseSessionName = ("SilkETWUserCollector_" + RandId);
+
+                // TODO: add command-line parameter to allow for only one tracer at a time
+                SilkUtility.EventParseSessionName = ("SilkETWUserCollector");
             }
 
             // Create trace session

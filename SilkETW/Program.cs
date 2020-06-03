@@ -132,6 +132,12 @@ namespace SilkETW
             }
 
             // Validate output parameters
+            string pipePrefix = "\\\\.\\pipe\\";
+            if (Path.StartsWith(pipePrefix))
+            {
+                OutputType = OutputType.pipe;
+                Path = Path.Substring(pipePrefix.Length);
+            } else
             if (OutputType == OutputType.None)
             {
                 SilkUtility.ReturnStatusMessage("[!] Select valid output type (-ot|--outputtype)", ConsoleColor.Red);
@@ -158,11 +164,6 @@ namespace SilkETW
                             }
                         }
                         catch { }
-                        if (Path.StartsWith("\\\\.\\pipe"))
-                        {
-                            OutputType = OutputType.pipe;
-                        }
-                        else
                         if (!(Directory.Exists(System.IO.Path.GetDirectoryName(Path))))
                         {
                             SilkUtility.ReturnStatusMessage("[!] Invalid path specified (-p|--path)", ConsoleColor.Red);

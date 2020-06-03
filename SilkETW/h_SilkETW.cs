@@ -505,17 +505,14 @@ namespace SilkETW
                 // Process JSON
                 if (OutputType == OutputType.pipe)
                 {
+                    // TODO: should we keep the pipe open or keep closing/reopening every time?
                     try
                     {
                         NamedPipeClientStream pipeClient = new NamedPipeClientStream(Path);
-                        if (!pipeClient.IsConnected)
-                        {
-                            pipeClient.Connect();
-                        }
+                        pipeClient.Connect();
                         using (StreamWriter sw = new StreamWriter(pipeClient))
                         {
                             sw.WriteLine(JSONData);
-                            sw.Flush();
                         }
                         pipeClient.Close();
                         return 0;
