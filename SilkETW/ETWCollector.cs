@@ -8,6 +8,9 @@ using System.Xml;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json.Linq;
+using System.Globalization;
+using System.Threading;
 
 namespace SilkETW
 {
@@ -40,6 +43,10 @@ namespace SilkETW
                 // TODO: add command-line parameter to allow for only one tracer at a time
                 SilkUtility.EventParseSessionName = ("SilkETWUserCollector");
             }
+
+            // Process 12,345 as 12345
+            CultureInfo ci = new CultureInfo("");
+            Thread.CurrentThread.CurrentCulture = ci;
 
             // Create trace session
             using (var TraceSession = new TraceEventSession(SilkUtility.EventParseSessionName))
@@ -183,6 +190,9 @@ namespace SilkETW
                                 }
                             };
 
+                            // TODO: instead of transforming to XML and parsing, it'd be best to iterate over properties of a dynamic object
+                            // JavaScriptSerializer serializer = new JavaScriptSerializer();
+                            // dynamic myDynamicObject = serializer.DeserializeObject(json);
                             parseXML(data.ToString());
                             if (isEventWriteStringXML)
                             {
@@ -191,10 +201,39 @@ namespace SilkETW
                             {
                                 // TODO: implement support for alternate payload types
                             }
-                            eRecord.XmlEventData = EventProperties;
+                            // eRecord.XmlEventData = EventProperties;
 
                             // Serialize to JSON
-                            String JSONEventData = Newtonsoft.Json.JsonConvert.SerializeObject(eRecord);
+                            JObject o = (JObject)JToken.FromObject(eRecord);
+                            o.Remove("XmlEventData");
+                            o.Remove("YaraMatch");
+                            foreach (DictionaryEntry s in EventProperties)
+                            {
+                                var token = o.SelectToken((string)s.Key);
+                                var newValue = JToken.FromObject((string)s.Value);
+                                if (token != null)
+                                {
+                                    token.Replace(newValue);
+                                }
+                                else
+                                {
+                                    o.Add((string)s.Key, newValue);
+                                }
+                            }
+
+                            // Rename 'EventName' to 'name'
+                            if (o["EventName"] != null)
+                            {
+                                var name = o["EventName"];
+                                o["EventName"].Parent.Remove();
+                                o.Add("name", name);
+                            }
+                            // TODO - remap:
+                            // - Opcode
+                            // - OpcodeName
+                            // - Timestamp
+
+                            String JSONEventData = o.ToString(Newtonsoft.Json.Formatting.None); // Newtonsoft.Json.JsonConvert.SerializeObject(eRecord);
                             int ProcessResult = SilkUtility.ProcessJSONEventData(JSONEventData, OutputType, Path, YaraScan, YaraOptions);
 
                             // Verify that we processed the result successfully
